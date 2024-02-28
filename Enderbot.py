@@ -22,32 +22,37 @@ def threadedMovement(side):
         logging.info("Motor side %s initialized", side)
 
         while True:
-            if side == 0:
-                speed = gamepad.axis('LEFT-Y')
+            try:
+                if gamePadReady:
+                    if side == 0:
+                        speed = gamepad.axis('LEFT-Y')
 
-                if speed < 0:
-                    direction='backward'
-                    speed = math.floor(speed * -10)
-                elif speed > 0:
-                    direction ='forward'
-                    speed = math.floor(speed * 10)
-            else:
-                speed = gamepad.axis('RIGHT-Y')
+                        if speed < 0:
+                            direction='backward'
+                            speed = math.floor(speed * -10)
+                        elif speed > 0:
+                            direction ='forward'
+                            speed = math.floor(speed * 10)
+                    else:
+                        speed = gamepad.axis('RIGHT-Y')
 
-                if speed < 0:
-                    direction='forward'
-                    speed = math.floor(speed * -10)
-                elif speed > 0:
-                    direction ='backward'
-                    speed = math.floor(speed * 10)
+                        if speed < 0:
+                            direction='forward'
+                            speed = math.floor(speed * -10)
+                        elif speed > 0:
+                            direction ='backward'
+                            speed = math.floor(speed * 10)
 
-            if speed < deadZone:
-                Motor.Stop()
-            else:
-                #logging.info("Rotating %s in direction %s with speed %s", side, direction, stepperDelayMapping[speed-1])
-                Motor.TurnStep(Dir=direction, steps=1, stepdelay = 1 / stepperDelayMapping[speed-1])
+                    if speed < deadZone:
+                        Motor.Stop()
+                    else:
+                        #logging.info("Rotating %s in direction %s with speed %s", side, direction, stepperDelayMapping[speed-1])
+                        Motor.TurnStep(Dir=direction, steps=1, stepdelay = 1 / stepperDelayMapping[speed-1])
 
-            time.sleep(pollInterval)
+                time.sleep(pollInterval)
+            
+            except IOError as e:
+                logging.info("Gamepad disconnected")
 
     except:
         logging.info("Motor side %s failed to initialize", side)
@@ -66,32 +71,44 @@ if __name__ == "__main__":
 
     # Gamepad settings
     gamepadType = Gamepad.Xbox360
-    pollInterval = 0.00001
+    pollInterval = 0.0000001
     deadZone = 0.1
-    stepperDelayMapping = [1000,1000,1000,10000,10000,100000,100000,1000000,1000000,10000000]
+    stepperDelayMapping = [1000,1000,1000,1000,1000,10000,10000,100000,100000,1000000]
     deadZone = 2
     leftSpeed = 0.0
     leftSpeed = 0.0
+    gamePadReady = False
 
-    # Wait for a connection
-    if not Gamepad.available():
-        logging.info("No gamepad connected")
-        while not Gamepad.available():
-            time.sleep(1.0)
-    gamepad = gamepadType()
-    logging.info("Gamepad connected")
-
-    # Start the background updating
-    gamepad.startBackgroundUpdates()
+    if Gamepad.available():
+        gamepad = gamepadType()
+        gamepad.startBackgroundUpdates()
+        gamePadReady = True
+    else:
+        gamePadReady = False
 
     leftSideMotors = threading.Thread(target=threadedMovement, args=(0,), daemon=True)
     leftSideMotors.start()
     rightSideMotors = threading.Thread(target=threadedMovement, args=(1,), daemon=True)
     rightSideMotors.start()
 
+    
     try:
         while True:
-            time.sleep(pollInterval)
+            try:
+                if not Gamepad.available():
+                    gamePadReady = False
+                    logging.info("No gamepad connected")
+                    while not Gamepad.available():
+                        time.sleep(1.0)
+                    gamepad = gamepadType()
+                    gamepad.startBackgroundUpdates()
+                    gamePadReady = True
+                    logging.info("Gamepad connected")
+
+                time.sleep(pollInterval)
+            
+            except IOError:
+                logging.info("Gamepad disconnected")
 
     except KeyboardInterrupt:
         pass
