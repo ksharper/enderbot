@@ -11,6 +11,9 @@ import logging
 from DRV8825 import DRV8825
 
 def threadedMovement(side):
+    global leftSpeed
+    global rightSpeed
+    global maxAccel
     logging.info("Thread for side %s: starting", side)
 
     try:
@@ -18,36 +21,52 @@ def threadedMovement(side):
             Motor = DRV8825(dir_pin=13, step_pin=19, enable_pin=12, mode_pins=(16, 17, 20))
         else:
             Motor = DRV8825(dir_pin=24, step_pin=18, enable_pin=4, mode_pins=(21, 22, 27))
-        Motor.SetMicroStep('hardward' ,'1/32step')
         logging.info("Motor side %s initialized", side)
 
         while True:
             try:
                 if gamePadReady:
                     if side == 0:
-                        speed = gamepad.axis('LEFT-Y')
-
-                        if speed < 0:
-                            direction='backward'
-                            speed = math.floor(speed * -10)
-                        elif speed > 0:
-                            direction ='forward'
-                            speed = math.floor(speed * 10)
-                    else:
-                        speed = gamepad.axis('RIGHT-Y')
-
-                        if speed < 0:
+                        newSpeed = gamepad.axis('LEFT-Y')
+                        
+                        if abs(newSpeed - leftSpeed) <= maxAccel:
+                            leftSpeed = newSpeed
+                        elif newSpeed > leftSpeed:
+                            leftSpeed = leftSpeed + maxAccel
+                        else:
+                            leftSpeed = leftSpeed - maxAccel
+                        
+                        if leftSpeed < 0:
                             direction='forward'
-                            speed = math.floor(speed * -10)
-                        elif speed > 0:
+                        elif leftSpeed > 0:
                             direction ='backward'
-                            speed = math.floor(speed * 10)
 
-                    if speed < deadZone:
+                        speedIndex = abs(math.floor(leftSpeed * 10))
+                        #logging.info("Left: %s",leftSpeed)
+
+                    else:
+                        newSpeed = gamepad.axis('RIGHT-Y')
+                        
+                        if abs(newSpeed - rightSpeed) <= maxAccel:
+                            rightSpeed = newSpeed
+                        elif newSpeed > rightSpeed:
+                            rightSpeed = rightSpeed + maxAccel
+                        else:
+                            rightSpeed = rightSpeed - maxAccel
+
+                        if rightSpeed < 0:
+                            direction='backward'
+                        elif rightSpeed > 0:
+                            direction ='forward'
+
+                        speedIndex = abs(math.floor(rightSpeed * 10))
+                        #logging.info("Right: %s",speedIndex)
+
+                    if speedIndex < deadZone:
                         Motor.Stop()
                     else:
                         #logging.info("Rotating %s in direction %s with speed %s", side, direction, stepperDelayMapping[speed-1])
-                        Motor.TurnStep(Dir=direction, steps=1, stepdelay = 1 / stepperDelayMapping[speed-1])
+                        Motor.TurnStep(Dir=direction, steps=1, stepdelay = 1 / stepperDelayMapping[speedIndex-1])
 
                 time.sleep(pollInterval)
             
@@ -69,14 +88,13 @@ if __name__ == "__main__":
     logging.basicConfig(format=format, level=logging.INFO,
                         datefmt="%H:%M:%S")
 
-    # Gamepad settings
     gamepadType = Gamepad.Xbox360
-    pollInterval = 0.0000001
-    deadZone = 0.1
-    stepperDelayMapping = [1000,1000,1000,1000,1000,10000,10000,100000,100000,1000000]
-    deadZone = 2
+    stepperDelayMapping = [1024,1024,1280,1536,2048,2560,3584,5120,8192,8192]
+    pollInterval = 1/8192
+    deadZone = 3
     leftSpeed = 0.0
-    leftSpeed = 0.0
+    rightSpeed = 0.0
+    maxAccel = 0.002
     gamePadReady = False
 
     if Gamepad.available():
@@ -99,13 +117,13 @@ if __name__ == "__main__":
                     gamePadReady = False
                     logging.info("No gamepad connected")
                     while not Gamepad.available():
-                        time.sleep(1.0)
+                        time.sleep(1.0) 
                     gamepad = gamepadType()
                     gamepad.startBackgroundUpdates()
                     gamePadReady = True
                     logging.info("Gamepad connected")
 
-                time.sleep(pollInterval)
+                time.sleep(1)
             
             except IOError:
                 logging.info("Gamepad disconnected")
