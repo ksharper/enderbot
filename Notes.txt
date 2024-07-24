@@ -1,0 +1,11 @@
+config.txt:
+
+[all]
+dtoverlay=disable-bt
+dtoverlay=imx519,cam=0
+enable_uart=0
+gpu_mem=320
+dtoverlay=rpivid-v4l2
+
+
+

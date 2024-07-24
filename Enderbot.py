@@ -1,136 +1,115 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-import Gamepad
+import pygame
 import time
 import RPi.GPIO as GPIO
 import time
 import math
-import threading
 import logging
-from DRV8825 import DRV8825
 
-def threadedMovement(side):
-    global leftSpeed
-    global rightSpeed
-    global maxAccel
-    logging.info("Thread for side %s: starting", side)
+format = "%(asctime)s: %(message)s"
+logging.basicConfig(format=format, level=logging.INFO,
+                    datefmt="%H:%M:%S")
 
-    try:
-        if side == 0:
-            Motor = DRV8825(dir_pin=13, step_pin=19, enable_pin=12, mode_pins=(16, 17, 20))
-        else:
-            Motor = DRV8825(dir_pin=24, step_pin=18, enable_pin=4, mode_pins=(21, 22, 27))
-        logging.info("Motor side %s initialized", side)
+Driver1Sleep = 12
+Driver1MotorAIn1 = 17
+Driver1MotorAIn2 = 27
+Driver1MotorBIn1 = 22
+Driver1MotorBIn2 = 23
+Driver2Sleep = 13
+Driver2MotorAIn1 = 24
+Driver2MotorAIn2 = 25
+Driver2MotorBIn1 = 26
+Driver2MotorBIn2 = 16
 
-        while True:
-            try:
-                if gamePadReady:
-                    if side == 0:
-                        newSpeed = gamepad.axis('LEFT-Y')
-                        
-                        if abs(newSpeed - leftSpeed) <= maxAccel:
-                            leftSpeed = newSpeed
-                        elif newSpeed > leftSpeed:
-                            leftSpeed = leftSpeed + maxAccel
-                        else:
-                            leftSpeed = leftSpeed - maxAccel
-                        
-                        if leftSpeed < 0:
-                            direction='forward'
-                        elif leftSpeed > 0:
-                            direction ='backward'
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(Driver1Sleep,GPIO.OUT)
+GPIO.setup(Driver2Sleep,GPIO.OUT)
+GPIO.setup(Driver1MotorAIn1,GPIO.OUT)
+GPIO.setup(Driver1MotorAIn2,GPIO.OUT)
+GPIO.setup(Driver1MotorBIn1,GPIO.OUT)
+GPIO.setup(Driver1MotorBIn2,GPIO.OUT)
+GPIO.setup(Driver2MotorAIn1,GPIO.OUT)
+GPIO.setup(Driver2MotorAIn2,GPIO.OUT)
+GPIO.setup(Driver2MotorBIn1,GPIO.OUT)
+GPIO.setup(Driver2MotorBIn2,GPIO.OUT)
 
-                        speedIndex = abs(math.floor(leftSpeed * 10))
-                        #logging.info("Left: %s",leftSpeed)
+GPIO.output(Driver1Sleep,GPIO.HIGH)
+GPIO.output(Driver2Sleep,GPIO.HIGH)
 
-                    else:
-                        newSpeed = gamepad.axis('RIGHT-Y')
-                        
-                        if abs(newSpeed - rightSpeed) <= maxAccel:
-                            rightSpeed = newSpeed
-                        elif newSpeed > rightSpeed:
-                            rightSpeed = rightSpeed + maxAccel
-                        else:
-                            rightSpeed = rightSpeed - maxAccel
+pwm_freq = 1000
 
-                        if rightSpeed < 0:
-                            direction='backward'
-                        elif rightSpeed > 0:
-                            direction ='forward'
+RightFrontMotorBackward = GPIO.PWM(Driver2MotorBIn1,pwm_freq)
+RightFrontMotorForward = GPIO.PWM(Driver2MotorBIn2,pwm_freq)
+RightBackMotorForward = GPIO.PWM(Driver2MotorAIn1,pwm_freq)
+RightBackMotorBackward = GPIO.PWM(Driver2MotorAIn2,pwm_freq)
 
-                        speedIndex = abs(math.floor(rightSpeed * 10))
-                        #logging.info("Right: %s",speedIndex)
+LeftFrontMotorForward = GPIO.PWM(Driver1MotorBIn1,pwm_freq)
+LeftFrontMotorBackward = GPIO.PWM(Driver1MotorBIn2,pwm_freq)
+LeftBackMotorBackward = GPIO.PWM(Driver1MotorAIn1,pwm_freq)
+LeftBackMotorForward = GPIO.PWM(Driver1MotorAIn2,pwm_freq)
 
-                    if speedIndex < deadZone:
-                        Motor.Stop()
-                    else:
-                        #logging.info("Rotating %s in direction %s with speed %s", side, direction, stepperDelayMapping[speed-1])
-                        Motor.TurnStep(Dir=direction, steps=1, stepdelay = 1 / stepperDelayMapping[speedIndex-1])
+pygame.init()
+pygame.joystick.init()
+joysticks = []
+deadZone = 20
 
-                time.sleep(pollInterval)
+clock = pygame.time.Clock()
+interval = 60
+
+run = True
+
+try: 
+    while run:
+        clock.tick(interval)
+
+        for event in pygame.event.get():
+            if event.type == pygame.JOYDEVICEADDED:
+                joy = pygame.joystick.Joystick(event.device_index)
+                joysticks.append(joy)
+                print("Joystick found")
             
-            except IOError as e:
-                logging.info("Gamepad disconnected")
+        for joystick in joysticks:
+        #      print(-joystick.get_axis(1))
+        #      print(-joystick.get_axis(4))
+            leftSpeed = round(-joystick.get_axis(1) * 100)
+            rightSpeed= round(-joystick.get_axis(4) * 100)
 
-    except:
-        logging.info("Motor side %s failed to initialize", side)
-        Motor.Stop()
-        exit()
+            if leftSpeed > deadZone:
+                LeftFrontMotorForward.start(abs(leftSpeed))
+                LeftFrontMotorBackward.start(0)
+                LeftBackMotorForward.start(abs(leftSpeed))
+                LeftBackMotorBackward.start(0)
+            elif leftSpeed < -deadZone:
+                LeftFrontMotorForward.start(0)
+                LeftFrontMotorBackward.start(abs(leftSpeed))
+                LeftBackMotorForward.start(0)
+                LeftBackMotorBackward.start(abs(leftSpeed))
+            else:
+                LeftFrontMotorForward.stop()
+                LeftFrontMotorBackward.stop()
+                LeftBackMotorForward.stop()
+                LeftBackMotorBackward.stop()
 
-    finally:
-        Motor.stop()
-        logging.info("Thread for side %s: finishing", side)
-
-       
-if __name__ == "__main__":
-    format = "%(asctime)s: %(message)s"
-    logging.basicConfig(format=format, level=logging.INFO,
-                        datefmt="%H:%M:%S")
-
-    gamepadType = Gamepad.Xbox360
-    stepperDelayMapping = [1024,1024,1280,1536,2048,2560,3584,5120,8192,8192]
-    pollInterval = 1/8192
-    deadZone = 3
-    leftSpeed = 0.0
-    rightSpeed = 0.0
-    maxAccel = 0.002
-    gamePadReady = False
-
-    if Gamepad.available():
-        gamepad = gamepadType()
-        gamepad.startBackgroundUpdates()
-        gamePadReady = True
-    else:
-        gamePadReady = False
-
-    leftSideMotors = threading.Thread(target=threadedMovement, args=(0,), daemon=True)
-    leftSideMotors.start()
-    rightSideMotors = threading.Thread(target=threadedMovement, args=(1,), daemon=True)
-    rightSideMotors.start()
-
-    
-    try:
-        while True:
-            try:
-                if not Gamepad.available():
-                    gamePadReady = False
-                    logging.info("No gamepad connected")
-                    while not Gamepad.available():
-                        time.sleep(1.0) 
-                    gamepad = gamepadType()
-                    gamepad.startBackgroundUpdates()
-                    gamePadReady = True
-                    logging.info("Gamepad connected")
-
-                time.sleep(1)
+            if rightSpeed > deadZone:
+                RightFrontMotorForward.start(abs(rightSpeed))
+                RightFrontMotorBackward.start(0)
+                RightBackMotorForward.start(abs(rightSpeed))
+                RightBackMotorBackward.start(0)
+            elif rightSpeed < -deadZone:
+                RightFrontMotorForward.start(0)
+                RightFrontMotorBackward.start(abs(rightSpeed))
+                RightBackMotorForward.start(0)
+                RightBackMotorBackward.start(abs(rightSpeed))
+            else:
+                RightFrontMotorForward.stop()
+                RightFrontMotorBackward.stop()
+                RightBackMotorForward.stop()
+                RightBackMotorBackward.stop()
             
-            except IOError:
-                logging.info("Gamepad disconnected")
+    pygame.quit()
 
-    except KeyboardInterrupt:
-        pass
-
-    finally:
-         # Ensure the background thread is always terminated when we are done
-         gamepad.disconnect()
+finally:
+    pygame.quit()
+    GPIO.cleanup()
