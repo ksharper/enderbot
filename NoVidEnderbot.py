@@ -52,9 +52,6 @@ LeftFrontMotorBackward = GPIO.PWM(Driver1MotorBIn2,pwm_freq)
 LeftBackMotorBackward = GPIO.PWM(Driver2MotorAIn1,pwm_freq)
 LeftBackMotorForward = GPIO.PWM(Driver2MotorAIn2,pwm_freq)
 
-camSize = (1280,720)
-screenSize = (1280,720)
-
 joysticks = []
 deadZone = 20
 interval = 60
@@ -62,20 +59,11 @@ interval = 60
 
 pygame.init()
 pygame.joystick.init()
-pygame.camera.init()
-
 
 clock = pygame.time.Clock()
 
-cam = pygame.camera.Camera('/dev/video0',camSize)
-cam.set_controls(hflip = True, vflip = True)
-cam.start()
-
 
 clock = pygame.time.Clock()
-
-screen = pygame.display.set_mode(screenSize,pygame.FULLSCREEN)
-snapshot = pygame.surface.Surface(camSize, 0, screen)
 
 run = True
 
@@ -133,14 +121,6 @@ try:
                 RightBackMotorBackward.stop()
             
 
-        if cam.query_image():
-            snapshot = cam.get_image()
-
-        screen.blit(snapshot, (0,0))
-
-        pygame.display.flip()
-
 finally:
-    cam.stop()
     pygame.quit()
     GPIO.cleanup()
